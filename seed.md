@@ -191,7 +191,7 @@ Each WebSocket connection targets a specific conversation: `/api/chat/ws/{sessio
 
 Client messages are user actions, not SDK calls. Every message is a JSON object with a `type` field.
 
-- **`prompt`** - Send a message. Includes text and optionally images. The server calls `session.prompt()` or `session.followUp()` depending on whether the agent is currently streaming.
+- **`prompt`** - Send a message. The server calls `session.prompt()` or `session.followUp()` depending on whether the agent is currently streaming.
 - **`abort`** - Stop the current response. The server calls `session.abort()`.
 - **`set_model`** - Change model. Include provider and model ID.
 - **`set_thinking_level`** - Change thinking level.
