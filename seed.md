@@ -29,17 +29,12 @@ Copy this content to `~/AGENTS.md` so that new pi sessions know how to use this 
 
 ## File Server
 
-The web server serves all files in the home directory via the `/files/**` route, like this:
-
-- `/files/my-folder` will return a directory listing of `~/my-folder`
-- `/files/my-folder/my-file.html` will return the raw file at `~/my-folder/my-file.html`
-- Appending `?view` will render the file nicely (e.g., markdown rendering, code syntax highlighting)
-- Appending `?edit` will show a CodeMirror that lets the user edit the file
+The web server serves all files in the home directory via the `/raw/**` route. There is also a browseable route `/files/**` with uploading, editing, and pretty rendering of markdown and code.
 
 ## Chat
 
 - The web server has a chat interface at `/chat` which is where users chat with pi. Pi's responses are markdown-rendered.
-- This setup lets pi make _artifacts_ in response to user queries. For example, pi can make a self-contained HTML page at `~/artifacts/2026-04-26-recipe-calculator.html` and then include a link in the response (leveraging the file server), e.g., `[Recipe Calculator](/files/artifacts/2026-04-26-recipe-calculator.html)`.
+- This setup lets pi make _artifacts_ in response to user queries. For example, pi can make a self-contained HTML page at `~/artifacts/2026-04-26-recipe-calculator.html` and then include a link in the response (leveraging the raw file server), e.g., `[Recipe Calculator](/raw/artifacts/2026-04-26-recipe-calculator.html)`.
 
 ## Things we might build
 
@@ -72,7 +67,17 @@ Here are some examples of things users may ask to build or do on this system:
 - pi coding agent SDK (your system prompt should indicate where you can find docs)
 - Client side: [marked](https://github.com/markedjs/marked), [CodeMirror](https://codemirror.net/), [highlight.js](https://github.com/highlightjs/highlight.js)
 
-# Chat Server
+# Web Server Routes
+
+```
+GET /                 -> home SPA   (HTMLBundle)
+GET /chat, /chat/*    -> chat SPA   (HTMLBundle)
+GET /files, /files/*  -> files SPA  (HTMLBundle)
+GET /raw/**           -> raw bytes  (function handler)
+*   /api/**           -> JSON/WS    (function handlers)
+```
+
+# Chat
 
 - Serve at `/chat`
 - Use pi's SDK
@@ -85,7 +90,10 @@ Here are some examples of things users may ask to build or do on this system:
 
 - No header bar, just a main scrolling area with all the chat messages and a bottom bar where you can type a message and send it
 - Bottom bar has a text field and a button on either side of it.
-  - On the left is a ⋯ button which opens up a list of additional actions. These include switching the model and thinking level and uploading an image.
+  - On the left is a ⋯ button which opens up a list of additional actions:
+    - Switch Model: opens a modal to let you pick a model
+    - Switch Thinking Level: opens a modal to let you pick thinking level
+    - Upload Image: opens browser file picker
   - On the right is a ↑ button to send. The send button turns into ■ while pi is responding and that lets the user stop pi (use `session.abort()`).
   - On mobile: Pressing enter in the chat field starts a new line. You have to press ↑ to send.
   - On desktop: Press shift-enter for a new line. Pressing enter sends.
@@ -124,43 +132,41 @@ Here are some examples of things users may ask to build or do on this system:
 - Client-server abstraction boundary: The server should have an API that mirrors pi's SDK as much as possible, then the client should have code to e.g., render messages as markdown. This way we can iterate on presentation without needing to restart the server. See appendix for suggested protocol.
 - CSS: Getting the layout to work right on iOS is harder than it should be. The main messages area must never scroll horizontally but individual elements (e.g., tables, code blocks) can scroll horizontally if necessary. The bottom input bar must always be at the bottom, even if iOS has the URL bar or keyboard open. See appendix for working example code.
 
-# File Server
+# Raw File Server
 
-- Serve at `/files`; `/files/PATH` mirrors the file system starting in the machine's home directory
-- A folder should show a listing of subfolders and files
-- On top of a folder listing is
+- Serve all raw files at `/raw/**` which mirrors the file system at `~/**`
+
+# Browseable File Server
+
+- Serve a browseable view at `/files/**` which mirrors the file system at `~/**`
+- On top is
   - ← button (goes back to top-level home page)
   - breadcrumbs (e.g., `~/folder/sub-folder`) and you can click any to navigate back up the hierarchy
-  - ⋯ button that opens a menu:
-    - Download ZIP
-    - Upload: opens a file picker
-    - New folder: prompts for a name
-    - New file: prompts for a name, makes a blank file, then goes to `?edit`
-    - Show hidden: default off, persist this preference in `localStorage`
-- For files, they should be sent back raw by default. Because we serve raw, HTML files and their references just work.
-- If you append `?view` then we should instead return an HTML page that gets and renders the raw file (e.g., markdown for `.md`, syntax highlighting for `.ts`, etc.)
-  - There are buttons for raw, edit, and copy to clipboard
-- The file listing should append `?view` in the links for markdown and code files but not HTML or image files (anything the browser renders natively should be "raw")
-- Files and folders in the listing have a ⋯ button along a rightmost column:
+  - ⋯ button that opens a menu
+    - For folders:
+      - Upload: opens a file picker
+      - New folder: prompts for a name
+      - New file: prompts for a name, makes a blank file
+      - Show hidden: default off, persist this preference in `localStorage`
+    - For files:
+      - Copy to clipboard (use a maximally compatible implementation)
+      - Edit (for textual files, puts the contents in a codemirror, has a save button)
+      - Raw
+- A folder shows a listing of subfolders and files. Each entry as a ⋯ button along a rightmost column:
   - Rename
   - Delete: confirm this
-  - For files:
-    - Raw
-    - View
-    - Edit
-- If you append `?edit` it shows a simple large CodeMirror and has a save button (disabled unless there are unsaved changes)
-
-## Gotchas
-
-- When serving raw files, Bun only appends `charset=utf-8` for 5 core web types (`html`, `css`, `js`, `json`, `text/plain`). All other `text/*` types like markdown and YAML are missing it, so browsers fall back to Latin-1 and garble Unicode. Following Go's `net/http` approach, we will blanket-add `charset=utf-8` to any `text/*` response that's missing it.
-- Use a maximally compatible implementation for copy to clipboard
+- For files
+  - `.md` - render the markdown
+  - other text content - syntax highlight the content
+  - images - show the image
+  - pdf - show the pdf in an iframe
 
 # Top-level home page
 
 - Serve at `/`
 - This is a convenience for quickly accessing the functionality of the server
-- Show a text box for starting a new chat
-- Show the directory listing of the home directory
+- Show a text box for starting a new chat (entry to `/chat`)
+- Show the directory listing of the home directory (entry to `/files`)
 - Users will likely ask to further customize this page
 
 # Appendix: Suggested Chat Protocol
@@ -342,68 +348,11 @@ Client messages are user actions, not SDK calls. Every message is a JSON object 
       <div id="messages">
         <div class="message msg-user">
           <div class="msg-role">👤 You</div>
-          <div class="msg-content">
-            Hey, can you help me write a simple HTTP server in TypeScript using
-            Bun?
-          </div>
+          <div class="msg-content">Here's a message</div>
         </div>
         <div class="message msg-assistant">
           <div class="msg-role">🤖 Assistant</div>
-          <div class="msg-content">
-            Sure! Here's a minimal Bun HTTP server: const server = Bun.serve({
-            port: 3000, fetch(req) { return new Response("Hello, world!"); },
-            }); console.log(`Listening on http://localhost:${server.port}`);
-            Save that as server.ts and run it with `bun run server.ts`.
-          </div>
-        </div>
-        <div class="message msg-user">
-          <div class="msg-role">👤 You</div>
-          <div class="msg-content">
-            How do I add routing to serve different paths?
-          </div>
-        </div>
-        <div class="message msg-assistant">
-          <div class="msg-role">🤖 Assistant</div>
-          <div class="msg-content">
-            You can use the URL from the request to handle different routes:
-            const server = Bun.serve({ port: 3000, fetch(req) { const url = new
-            URL(req.url); if (url.pathname === "/") { return new Response("Home
-            page"); } if (url.pathname === "/about") { return new
-            Response("About page"); } return new Response("Not found", { status:
-            404 }); }, }); Each path gets its own handler logic inside the fetch
-            function.
-          </div>
-        </div>
-        <div class="message msg-user">
-          <div class="msg-role">👤 You</div>
-          <div class="msg-content">
-            Nice, that's really clean. Can I serve static files too?
-          </div>
-        </div>
-        <div class="message msg-assistant">
-          <div class="msg-role">🤖 Assistant</div>
-          <div class="msg-content">
-            Yes! Bun has a built-in way to serve files: if
-            (url.pathname.startsWith("/static/")) { const filePath = "./public"
-            + url.pathname.replace("/static", ""); const file =
-            Bun.file(filePath); if (await file.exists()) { return new
-            Response(file); } return new Response("Not found", { status: 404 });
-            } Bun.file() handles MIME types automatically based on the file
-            extension. Just put your files in a public/ directory and you're
-            good to go.
-          </div>
-        </div>
-        <div class="message msg-user">
-          <div class="msg-role">👤 You</div>
-          <div class="msg-content">Thanks, this is super helpful!</div>
-        </div>
-        <div class="message msg-assistant">
-          <div class="msg-role">🤖 Assistant</div>
-          <div class="msg-content">
-            You're welcome! Bun makes it really straightforward to build servers
-            without any extra dependencies. Let me know if you need help with
-            anything else.
-          </div>
+          <div class="msg-content">Here's a response</div>
         </div>
       </div>
       <div id="input-bar">
