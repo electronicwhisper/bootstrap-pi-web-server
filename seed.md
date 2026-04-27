@@ -84,7 +84,7 @@ GET /raw/**           -> raw bytes  (function handler)
 - Use WebSockets to stream data
 - Use markdown rendering where appropriate
 - You should be able to start a new conversation or browse a list of old conversations in a left side panel
-- Each chat conversation is served at `/chat/**` where `**` mirrors pi's JSONL storage scheme, e.g., the session at `~/.pi/agent/sessions/--root--/2026-...-abc123.jsonl` is reachable at `/chat/--root--/2026-...-abc123`
+- Each chat conversation is served at `/chat/**` where `**` mirrors pi's JSONL storage scheme. Pi stores sessions at `~/.pi/agent/sessions/--<path>--/<timestamp>_<uuid>.jsonl` (where `<path>` is the working directory with `/` replaced by `-`) so our URLs should be `/chat/--<path>--/<timestamp>_<uuid>`.
 
 ## Layout and UX
 
@@ -102,20 +102,18 @@ GET /raw/**           -> raw bytes  (function handler)
 - Messages include:
   - User messages: 👤 You, blue background, markdown render
   - Assistant messages: 🤖 Assistant, green background, markdown render
-  - Other: gray background, scrolling `pre` field with the contents
-    - Tool calls, 🔧 bash
-    - Tool results, 📋 Result or ❌ Error
-    - 🧠 Thinking
-    - ⚙️ Model, ⚙️ Thinking Level
-    - etc.
-- We want to emphasize the chat but we also want visibility into all the messages so the user understands what's going on behind the scenes
+  - Assistant thinking: 🧠 Thinking, gray background, scrolling text field
+  - Assistant tool calls: e.g. 🔧 bash, gray background, scrolling `pre` field
+  - Tool responses: 📋 Result or ❌ Error, gray background, scrolling `pre` field
+  - System messages: ⚙️ Model or ⚙️ Thinking Level, gray background
+- We want to emphasize the chat (user and assistant messages) but we also want visibility into all the messages so the user understands what's going on behind the scenes
 - All messages from pi get streamed in on the WebSocket for real-time feedback
-  - When streaming into a scrolling pre field, scroll it so we can see the data coming in
+  - When streaming into a scrolling field, scroll it so we can see the data coming in
   - Scroll the main messages area as messages stream in
   - But don't scroll any area where the scroll is not already at the bottom (e.g., the user has scrolled up to look at something)
 - User messages have a small Edit button to branch the conversation. When there's a branch it shows e.g., `← 1 of 3 →` to let you switch branch.
 - On mobile there's a floating hamburger menu icon in the top-left which opens the left side panel. On desktop the left side panel is always open. The chat scrolling area has enough padding-top so that the hamburger icon doesn't cover it up when scrolled to the top.
-  - The left side panel lets you go back to the homepage, start a new chat, and has a list of old chats, recent on top. You can click these to open and continue them.
+  - The left side panel lets you go back to the homepage 🏠, start a new chat, and has a list of old chats, recent on top. You can click these to open and continue them.
 
 ## Implementation notes
 
@@ -140,7 +138,7 @@ GET /raw/**           -> raw bytes  (function handler)
 
 - Serve a browseable view at `/files/**` which mirrors the file system at `~/**`
 - On top is
-  - ← button (goes back to top-level home page)
+  - 🏠 button (goes back to top-level home page)
   - breadcrumbs (e.g., `~/folder/sub-folder`) and you can click any to navigate back up the hierarchy
   - ⋯ button that opens a menu
     - For folders:
@@ -175,13 +173,15 @@ The guiding principle is that the server should be a **thin relay** between the 
 
 ## REST Endpoints
 
-- **`POST /chat/api/new`** - Creates a new session. Returns `{ path }` where path is the session's URL path (e.g., `--root--/2026-...-abc123`). The client navigates to `/chat/{path}` to open it.
-- **`GET /chat/api/sessions`** - Returns the session list for the sidebar. Each entry includes the path, timestamp, and first message or session name.
-- **`GET /chat/api/models`** - Returns available models and thinking levels.
+- **`POST /api/chat/new`** - Creates a new session. Returns `{ path }` where path is the session's URL path (e.g., `--root--/2026-...-abc123`). The client navigates to `/chat/{path}` to open it.
+  - Hint: An empty session has no on-disk file until something is appended; write the header yourself or append a no-op entry if you need an addressable empty session
+- **`GET /api/chat/sessions`** - Returns the session list for the sidebar. Each entry includes the path, timestamp, and first message or session name.
+- **`GET /api/chat/models`** - Returns available models and thinking levels.
+  - Hint: Available models, providers, and credentials may come from extensions, not just auth.json. Before serving `/api/chat/models`, create a throwaway session and call `bindExtensions({})` so providers like the exe.dev gateway register themselves into the shared `ModelRegistry`.
 
 ## WebSocket
 
-Each WebSocket connection targets a specific conversation: `/chat/ws/{sessionPath}`. The server maps this to a JSONL file and either creates a new `AgentSession` or attaches to an existing one (per the session multiplexing rules).
+Each WebSocket connection targets a specific conversation: `/api/chat/ws/{sessionPath}`. The server maps this to a JSONL file and either creates a new `AgentSession` or attaches to an existing one (per the session multiplexing rules).
 
 ### Server → Client
 
