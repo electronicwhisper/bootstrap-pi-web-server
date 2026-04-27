@@ -90,7 +90,7 @@ Here are some examples of things users may ask to build or do on this system:
   - On mobile: Pressing enter in the chat field starts a new line. You have to press ↑ to send.
   - On desktop: Press shift-enter for a new line. Pressing enter sends.
   - If you paste an image it should add that to the message you're composing
-  - Show image attachments as thumbnails above the text input, with `x` controls to remove them
+  - Show image attachments as thumbnails above the text input, with `x` buttons to remove them
 - Messages include:
   - User messages: 👤 You, blue background, markdown render
   - Assistant messages: 🤖 Assistant, green background, markdown render
